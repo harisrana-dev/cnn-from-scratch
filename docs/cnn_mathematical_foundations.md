@@ -901,36 +901,41 @@ being large is not enough, it must be the maximum of its window.
 
 ### 19.5 Dense layer gradients
 
-One sample, $M = 3$, $N = 2$:
+One sample, $M = 3$ inputs, $N = 2$ outputs ($W \in \mathbb{R}^{3 \times 2}$):
 
 ```text
-a = [1.0, 2.0, 0.5]
-W = [[ 0.5, -1.0,  2.0],        (row 1)
-     [ 1.0,  0.5, -0.5]]        (row 2)
+a = [1.0, 2.0, 0.5]  # M=3 inputs (row vector)
+W = [[ 0.0, -0.5],      # W shape (3,2): input 1's weights
+     [-0.25,  2.75],   # input 2's weights
+     [ 0.0, -6.5]]    # input 3's weights
 b = [0.1, -0.2]
 
-z_1 = 0.5*1 + (-1.0)*2 + 2.0*0.5  + 0.1 = 0.5 - 2 + 1.0 + 0.1 = -0.4
-z_2 = 1.0*1 +  0.5*2 + (-0.5)*0.5 - 0.2 = 1.0 + 1 - 0.25 - 0.2 =  1.55
+# Forward: z_n = \sum_m a_m * W_{m,n} + b_n
+z_1 = 1.0*0 + 2.0*(-0.25) + 0.5*0 + 0.1 = -0.4
+z_2 = 1.0*(-0.5) + 2.0*2.75 + 0.5*(-6.5) + (-0.2) = 1.55
 z = [-0.4, 1.55]
 ```
 
-With upstream gradient $\mathbf{g} = \partial L/\partial z = [0.3, -0.1]$:
+With upstream gradient $\mathbf{g} = \partial L/\partial z = [0.3, -0.1]$ (shape $(N,) = (2,)$):
+
+Correct gradients (using the convention $W \in \mathbb{R}^{M \times N}$,
+$dW_{m,n} = a_m * g_n$, $da_m = \sum_k g_k * W_{m,k}$):
 
 ```text
-dW = g^T a  (outer product)                 db = g       da = W^T g
-dW = [[ 0.3*1.0,  0.3*2.0,  0.3*0.5],        db = [ 0.3,   da = [0.5*0.3 + 1.0*(-0.1),
-      [-0.1*1.0, -0.1*2.0, -0.1*0.5]]              -0.1]         (-1.0)*0.3 + 0.5*(-0.1),
-                                                           2.0*0.3 + (-0.5)*(-0.1)]
-
-dW = [[ 0.3,  0.6,  0.15],                   db = [ 0.3,   da = [ 0.05,
-      [-0.1, -0.2, -0.05]]                        -0.1]          -0.35,
-                                                                   0.65]
+dW = a^T g = [[ 0.30, -0.10],
+                [ 0.60, -0.20],
+                [ 0.15, -0.05]]  # shape (M,N) = (3,2)
+db = [0.3, -0.1]  # shape (N,) = (2,)
+da = g @ W^T = [0.05, -0.35, 0.65]  # shape (M,) = (3,)
 ```
 
-Checks: `dW` has the shape of `W` $(2,3)$, `db` of `b` $(2,)$, `da` of `a`
-$(3,)$. Entry $W_{1,2}$, the weight from $a_2 = 2.0$ to $z_1$, receives
-$\mathbf{g}_1 a_2 = 0.3 \cdot 2.0 = 0.6$: its gradient is large because both the
-input and the upstream gradient are.
+Shapes summary:
+- $W$: $(3,2)$ — input-by-output matrix
+- $dW$: $(3,2)$ — same shape as $W$
+- $b$: $(2,)$ — bias per output
+- $db$: $(2,)$ — same shape as $b$  
+- $a$: $(3,)$ — input vector
+- $da$: $(3,)$ — same shape as $a$
 
 For a batch, `dW = A^T G` accumulates the outer products of all samples and
 `db = sum(G, axis=0)`; with the $1/B$ already inside $G$ both are averages.
@@ -965,8 +970,7 @@ Parameter $W_{0,0} = 0.5$ with gradient $0.3$, bias $b_0 = 0.1$ with gradient
 $0.3$, learning rate $\eta = 0.01$:
 
 $$
-W_{0,0} \leftarrow 0.5 - 0.01 \times 0.3 = 0.497,
-\qquad
+W_{0,0} \leftarrow 0.5 - 0.01 \times 0.3 = 0.497,\qquad
 b_0 \leftarrow 0.1 - 0.01 \times 0.3 = 0.097 .
 $$
 
@@ -992,3 +996,4 @@ move up: $b_1 = -0.2 - 0.01 \times (-0.1) = -0.199$.
   Dataset for Benchmarking Machine Learning Algorithms.*
 - TensorFlow/Keras API documentation for `Conv2D`, `MaxPooling2D`, `Dense`,
   `categorical_crossentropy` and `SGD`.
+
