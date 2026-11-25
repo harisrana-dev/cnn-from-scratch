@@ -18,8 +18,9 @@ After `python -m cnn_scratch.data.prepare_data`:
 | `figures/dataset_samples.png` | 10 rows (one per class) x 10 sample images |
 | `figures/class_distribution.png` | per-class counts for the train and test subsets |
 
-Both are git-ignored by default; add a figure explicitly with `git add -f` if it
-belongs in the report.
+Both figures are committed as the Phase 1 deliverables. The directory ignores
+new figures by default, so force-add any later figure that belongs in the
+report (`git add -f results/figures/<name>.png`).
 
 ## Planned contents (not yet produced)
 
