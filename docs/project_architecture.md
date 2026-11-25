@@ -44,7 +44,8 @@ src/cnn_scratch/
 │   ├── dataset_utils.py   constants, validation, NPZ/JSON persistence
 │   └── prepare_data.py    acquisition → subset → normalise → validate → save
 ├── models/
-│   └── __init__.py        placeholder: layers/models arrive in Phase 3+
+│   ├── __init__.py        package docstring, lists planned modules
+│   └── architecture.py    frozen shapes, parameter counts, validation
 └── utils/
     ├── __init__.py
     └── visualization.py   sample grid and class-distribution figures
@@ -72,6 +73,13 @@ separate so each step can be demonstrated and tested individually:
 
 `visualization.py` renders figures to `results/figures/` with the Agg backend so
 plots work in a terminal and in VS Code alike.
+
+`architecture.py` owns the frozen network: it reads the `architecture` block of
+the experiment configuration, validates every layer declaration, and reports the
+output shape and trainable-parameter count of each layer (26x26x8 → 13x13x8 →
+1352 → 10, 80 + 13,530 = 13,610 parameters). It performs no computation, which
+is what keeps this phase free of layer code while making the documented numbers
+checkable.
 
 ## Data flow
 
@@ -103,6 +111,17 @@ scratch CNN (NumPy)          Keras CNN (TensorFlow)
   readable with `np.load`.
 - **No packaging metadata**: `conftest.py` puts `src/` on `sys.path`, which is
   enough for an assignment and avoids an unnecessary install step.
+
+## Documentation map
+
+| Document | Content |
+|---|---|
+| `README.md` | objective, setup, dataset, architecture summary, current status |
+| `docs/project_architecture.md` | module responsibilities and data flow |
+| `docs/dataset_documentation.md` | dataset source, subsets, preprocessing, artefacts |
+| `docs/cnn_mathematical_foundations.md` | forward and backward derivations, notation, worked examples |
+| `docs/backpropagation_walkthrough.md` | one training step traced backwards, with cached tensors and gradient shapes |
+| `docs/development_roadmap.md` | phase scope and honest status |
 
 ## Planned additions (not implemented)
 

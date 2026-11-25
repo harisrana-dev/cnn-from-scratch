@@ -17,16 +17,34 @@ Statuses below reflect what actually exists in the repository, not intentions.
 
 **Not in Phase 1:** no layers, no losses, no gradients, no training.
 
-## Phase 2 — Mathematical foundations and architecture design
+## Phase 2 — Mathematical foundations and architecture design (complete)
 
-- [ ] Written derivation of convolution, pooling and dense forward passes
-- [ ] Backpropagation derivations for each layer type
-- [ ] Cross-entropy and softmax gradient
-- [ ] Fix the architecture shared by both implementations, e.g.
-      `Conv(8, 3x3, padding='same') → ReLU → MaxPool(2x2) → Conv(16, 3x3) → ReLU
-      → MaxPool(2x2) → Flatten → Dense(64) → ReLU → Dense(10) → Softmax`
-- [ ] Shape-check table for every layer transition
-- [ ] Record the design in `docs/`
+- [x] Written derivation of convolution, ReLU, pooling, flatten and dense
+      forward passes
+- [x] Backpropagation derivations for every layer type
+- [x] Cross-entropy, numerically stable softmax and the combined
+      softmax-cross-entropy derivative
+- [x] Mini-batch gradient averaging and the SGD update rule
+- [x] Frozen architecture shared by both implementations, declared in
+      `configs/experiment_config.json`:
+      `Conv2D(8, 3x3, stride 1, valid) → ReLU → MaxPool2D(2x2, stride 2) →
+      Flatten → Dense(10) → Softmax`
+- [x] Shape-check table for every layer transition, with and without the batch
+      dimension
+- [x] Parameter counts derived and validated: 80 (convolution) + 13,530 (dense)
+      = 13,610 trainable parameters
+- [x] Documentation in `docs/cnn_mathematical_foundations.md` and
+      `docs/backpropagation_walkthrough.md`
+- [x] Architecture validation module and tests (`models/architecture.py`,
+      `tests/test_architecture.py`)
+
+This smaller architecture replaces the earlier outline (two convolutions, `same`
+padding, `Dense(64)`): one convolution keeps the parameter count at 13,610 and
+makes every derivation and every gradient check small enough to verify by hand.
+
+**Not in Phase 2:** no layer implementation, no forward or backward pass, no
+loss function, no optimiser and no training loop. No accuracy or loss figure
+exists yet.
 
 ## Phase 3 — NumPy layer implementations
 
