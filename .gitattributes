@@ -1,0 +1,29 @@
+# Default: normalise text files to LF in the repository.
+* text=auto
+
+# Source code and documentation
+*.py     text eol=lf
+*.md     text eol=lf
+*.txt    text eol=lf
+*.json   text eol=lf
+*.cfg    text eol=lf
+*.toml   text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+
+# Jupyter notebooks: text, but never diff the stored outputs.
+*.ipynb  text eol=lf
+*.ipynb  diff=jupyter
+
+# Binary artefacts
+*.npz    binary
+*.npy    binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.pdf    binary
+*.h5     binary
+*.keras  binary
+*.ckpt   binary

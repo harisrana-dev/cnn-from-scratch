@@ -1,0 +1,77 @@
+# ---------------------------------------------------------------------------
+# Python virtual environments
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# ---------------------------------------------------------------------------
+# Python bytecode, build output and tool caches
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test, lint and type-checker caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# ---------------------------------------------------------------------------
+# Jupyter
+# ---------------------------------------------------------------------------
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Environment files and secrets
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Datasets: the raw and processed Fashion-MNIST files are never committed.
+# Regenerate them with `python -m cnn_scratch.data.prepare_data`.
+# ---------------------------------------------------------------------------
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Keras download cache, in case it is redirected inside the project
+data/keras_cache/
+
+# ---------------------------------------------------------------------------
+# Generated artifacts: selected final figures/metrics are committed explicitly
+# with `git add -f`, everything else is ignored.
+# ---------------------------------------------------------------------------
+results/figures/*
+results/metrics/*
+!results/figures/.gitkeep
+!results/metrics/.gitkeep
+
+# Trained model checkpoints (later phases)
+*.h5
+*.keras
+*.ckpt
+*.pkl
+
+# ---------------------------------------------------------------------------
+# Logs and temporary files
+# ---------------------------------------------------------------------------
+*.log
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+desktop.ini

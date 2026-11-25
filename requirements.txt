@@ -1,0 +1,13 @@
+# Direct dependencies for cnn-from-scratch, pinned to the versions verified in
+# Phase 1. Tested environment: Windows 11, CPython 3.13.5 (64-bit), native
+# Windows wheels (TensorFlow ships cp313-win_amd64 from 2.20.0 onwards).
+#
+# Install with:  pip install -r requirements.txt
+
+numpy==2.3.5
+tensorflow==2.21.0        # includes keras 3.15.1
+matplotlib==3.10.7
+scikit-learn==1.7.2
+jupyter==1.1.1
+ipykernel==7.1.0
+pytest==9.0.1
