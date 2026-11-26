@@ -9,9 +9,10 @@ This repository is an individual university assignment in Artificial
 Intelligence / Deep Learning. It is written to be read: every operation the
 scratch model performs is plain, inspectable Python.
 
-**Current status: Phase 1 complete** — repository foundation, environment and
-dataset pipeline. No CNN layers, losses, gradients or training code exist yet;
-they belong to later phases (see the roadmap).
+**Current status: Phase 2 complete** — repository foundation, environment,
+dataset pipeline, and the mathematical foundations plus the validated
+architecture shared by both implementations. No CNN layers, losses, gradients or
+training code exist yet; they belong to later phases (see the roadmap).
 
 ---
 
@@ -75,6 +76,36 @@ evidence that the manual implementation is correct.
 `load_fashion_mnist()` only, and nothing in the dataset module imports TensorFlow
 at module level. Both implementations consume the same processed `.npz` files, so
 their inputs are identical by construction.
+
+### The frozen architecture
+
+Both implementations build exactly the network below. It is declared in
+`configs/experiment_config.json`, and `src/cnn_scratch/models/architecture.py`
+derives the shapes and parameter counts from that declaration, so the
+documentation cannot drift from the configuration.
+
+| Layer | Configuration | Output (one sample) | Trainable parameters |
+|---|---|---|---|
+| Input | 28 x 28 grayscale, NHWC | `(28, 28, 1)` | 0 |
+| Conv2D | 8 filters, 3x3, stride 1, valid, bias | `(26, 26, 8)` | 80 |
+| ReLU | element-wise | `(26, 26, 8)` | 0 |
+| MaxPool2D | 2x2, stride 2, valid | `(13, 13, 8)` | 0 |
+| Flatten | row-major | `(1352,)` | 0 |
+| Dense | 10 units, bias, logits | `(10,)` | 13,530 |
+| Softmax | 10 class probabilities | `(10,)` | 0 |
+
+Total trainable parameters: **13,610**. Batch shapes prepend the batch
+dimension — `(32, 26, 26, 8)`, `(32, 1352)`, `(32, 10)` with the configured batch
+size.
+
+Initial settings shared by both models: seed 42, NHWC layout, He normal
+initialisation, zero biases, SGD with learning rate 0.01, batch size 32, 5
+epochs, mean categorical cross-entropy.
+
+Derivations with worked numerical examples:
+[`docs/cnn_mathematical_foundations.md`](docs/cnn_mathematical_foundations.md).
+One training step traced backwards, with every cached tensor and gradient shape:
+[`docs/backpropagation_walkthrough.md`](docs/backpropagation_walkthrough.md).
 
 ## 3. Dataset
 
@@ -150,13 +181,15 @@ cnn-from-scratch/
 │       │   ├── prepare_data.py   # pipeline + CLI
 │       │   └── dataset_utils.py  # constants, validation, NPZ/JSON I/O
 │       ├── models/
-│       │   └── __init__.py       # placeholder for Phase 3-5
+│       │   ├── __init__.py
+│       │   └── architecture.py   # frozen shapes and parameter counts
 │       └── utils/
 │           ├── __init__.py
 │           └── visualization.py  # sample grid, class distribution
 ├── tests/
 │   ├── __init__.py
-│   └── test_data_preparation.py
+│   ├── test_data_preparation.py
+│   └── test_architecture.py
 ├── results/
 │   ├── figures/
 │   ├── metrics/
@@ -164,6 +197,8 @@ cnn-from-scratch/
 ├── docs/
 │   ├── project_architecture.md
 │   ├── dataset_documentation.md
+│   ├── cnn_mathematical_foundations.md
+│   ├── backpropagation_walkthrough.md
 │   └── development_roadmap.md
 └── report/
     └── README.md
@@ -296,7 +331,10 @@ through the project pipeline first:
   not;
 - save/reload round-trip preserves values and dtypes;
 - validation rejects wrong shapes, unnormalised pixels and unbalanced splits;
-- metadata consistency with the saved arrays.
+- metadata consistency with the saved arrays;
+- the frozen architecture: each layer's output shape, the 1352-wide flatten,
+  convolution parameters 80, dense parameters 13,530, total 13,610,
+  configuration consistency, and rejection of invalid layer specifications.
 
 ## 10. Expected dataset outputs
 
@@ -326,8 +364,8 @@ repository; the command is deterministic.
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1 | Repository foundation, environment, dataset pipeline, docs, tests | **complete** |
-| 2 | Mathematical foundations, architecture design, shape analysis | not started |
+| 1 | Repository foundation, environment, dataset pipeline, docs, tests | **complete, published** |
+| 2 | Mathematical foundations, frozen architecture, shape and parameter validation | **complete** |
 | 3 | NumPy layers (conv, ReLU, pool, dense, softmax) + gradient checks | not started |
 | 4 | Scratch CNN: forward/backward, SGD training loop | not started |
 | 5 | Equivalent Keras model, identical settings | not started |
@@ -346,7 +384,11 @@ Details and per-phase checklists:
 - Fashion-MNIST acquisition, balanced subset selection, preprocessing,
   validation, persistence and metadata.
 - Visualisation utilities.
-- Automated pytest suite for the dataset layer.
+- Mathematical foundations and a backpropagation walkthrough (`docs/`), with
+  worked numerical examples.
+- The frozen architecture with validated output shapes and parameter counts
+  (`src/cnn_scratch/models/architecture.py`).
+- Automated pytest suites for the dataset layer and the architecture.
 
 **Not implemented (by design for this phase)**
 
