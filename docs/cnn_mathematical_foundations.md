@@ -540,9 +540,10 @@ $\exp(-104)$ underflows to 0. Unshifted, a logit of 100 would produce `inf/inf`
 so the largest numerator is 1 and the denominator lies in $[1, N]$: no
 overflow, and the smallest representable probability is limited only by
 underflow of the individual numerators, which contributes $\exp(-88) \approx 0$
-harmlessly. (A logit of $-100$ in every class does not produce `0/0$ because
-`exp(-100)` is representable as a subnormal in float32; only values below about
-$-88$ guarantee underflow to zero.)
+harmlessly. (`exp(-104)` underflows to zero in float32, whereas `exp(-100)`
+remains representable as a subnormal value. Therefore, sufficiently negative
+logits can cause all unshifted exponentials to underflow, producing an invalid
+`0/0` normalization.)
 
 The maximum is taken **per sample** (along the class axis), not over the whole
 batch, because each row is an independent distribution.
