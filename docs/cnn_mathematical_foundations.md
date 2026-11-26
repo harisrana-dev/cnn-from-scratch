@@ -536,11 +536,13 @@ $$
 **Why the shift is mandatory in float32.** $\exp(89) \approx 4.5\times10^{38}$
 already exceeds the float32 maximum ($\approx 3.4\times10^{38}$), and
 $\exp(-104)$ underflows to 0. Unshifted, a logit of 100 would produce `inf/inf`
-(nan) and a logit of $-100$ in every class would produce `0/0`. After
-subtracting the row maximum the largest argument is exactly 0, so the largest
-numerator is 1 and the denominator lies in $[1, N]$: no overflow, and the
-smallest representable probability is limited only by underflow of the
-individual numerators, which contributes $\exp(-88) \approx 0$ harmlessly.
+(nan). After subtracting the row maximum the largest argument is exactly 0,
+so the largest numerator is 1 and the denominator lies in $[1, N]$: no
+overflow, and the smallest representable probability is limited only by
+underflow of the individual numerators, which contributes $\exp(-88) \approx 0$
+harmlessly. (A logit of $-100$ in every class does not produce `0/0$ because
+`exp(-100)` is representable as a subnormal in float32; only values below about
+$-88$ guarantee underflow to zero.)
 
 The maximum is taken **per sample** (along the class axis), not over the whole
 batch, because each row is an independent distribution.
@@ -703,10 +705,10 @@ before any parameter is modified (a "simultaneous" update). Updating $\mathbf{W}
 before computing $\nabla_{\mathbf{W}_2}$ would make the two gradients belong to
 different functions and is not SGD.
 
-**Why 0.01.** Small enough that the mean cross-entropy decreases monotonically on
-a 32-sample batch, large enough to make progress within a handful of epochs on
-CPU. Whether it is a good choice is an empirical question; the loss curve in
-Phase 4 will answer it, and no claim is made here.
+**Why 0.01.** The initial learning rate is set to 0.01 as a starting hyperparameter.
+Its suitability will be evaluated empirically using the training-loss curve in Phase 4.
+No monotonic-decrease guarantee is assumed. Whether it is a good choice is an
+empirical question; the loss curve in Phase 4 will answer it.
 
 ---
 
