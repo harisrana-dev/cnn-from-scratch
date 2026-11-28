@@ -9,10 +9,11 @@ This repository is an individual university assignment in Artificial
 Intelligence / Deep Learning. It is written to be read: every operation the
 scratch model performs is plain, inspectable Python.
 
-**Current status: Phase 2 complete** — repository foundation, environment,
-dataset pipeline, and the mathematical foundations plus the validated
-architecture shared by both implementations. No CNN layers, losses, gradients or
-training code exist yet; they belong to later phases (see the roadmap).
+**Current status: Phase 3 complete** — repository foundation, environment,
+dataset pipeline, mathematical foundations, the validated shared architecture,
+and the pure-NumPy CNN layers with forward/backward passes verified against
+float64 finite-difference gradient checks. The training loop and experiments
+belong to Phase 4 (see the roadmap).
 
 ---
 
@@ -335,6 +336,12 @@ through the project pipeline first:
 - the frozen architecture: each layer's output shape, the 1352-wide flatten,
   convolution parameters 80, dense parameters 13,530, total 13,610,
   configuration consistency, and rejection of invalid layer specifications.
+- every NumPy layer's forward and backward pass: shapes, forward values,
+  analytic gradients versus float64 central differences (convolution input,
+  weights and bias; dense input, weights and bias; pooling input; the general
+  softmax vector-Jacobian product; the fused softmax-cross-entropy logits
+  gradient), pooling tie handling, overlapping-window gradient accumulation,
+  and the full `ScratchCNN` forward/backward integration.
 
 ## 10. Expected dataset outputs
 
@@ -366,7 +373,7 @@ repository; the command is deterministic.
 |---|---|---|
 | 1 | Repository foundation, environment, dataset pipeline, docs, tests | **complete, published** |
 | 2 | Mathematical foundations, frozen architecture, shape and parameter validation | **complete** |
-| 3 | NumPy layers (conv, ReLU, pool, dense, softmax) + gradient checks | not started |
+| 3 | NumPy layers (conv, ReLU, pool, dense, softmax) + gradient checks | **complete** |
 | 4 | Scratch CNN: forward/backward, SGD training loop | not started |
 | 5 | Equivalent Keras model, identical settings | not started |
 | 6 | Comparison: accuracy, loss curves, timing, confusion matrices | not started |
@@ -389,11 +396,16 @@ Details and per-phase checklists:
 - The frozen architecture with validated output shapes and parameter counts
   (`src/cnn_scratch/models/architecture.py`).
 - Automated pytest suites for the dataset layer and the architecture.
+- Pure-NumPy `Conv2D`, `ReLU`, `MaxPool2D`, `Flatten`, `Dense`, stable softmax
+  and categorical cross-entropy layers with manual forward and backward passes
+  (`src/cnn_scratch/models/layers.py`), and the assembled `ScratchCNN`
+  forward/backward pass (`src/cnn_scratch/models/scratch_cnn.py`).
+- Gradient validation: analytic gradients match float64 central differences
+  for every parameter tensor, for the general softmax VJP and for the fused
+  `(P - Y) / B` logits gradient; 77 tests pass.
 
-**Not implemented (by design for this phase)**
+**Not implemented yet**
 
-- Convolution, ReLU, pooling, dense or softmax layers.
-- Loss functions and manual backpropagation.
 - Gradient descent and any training loop.
 - The Keras model.
 - Any accuracy or loss number.
