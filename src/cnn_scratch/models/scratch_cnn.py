@@ -10,9 +10,23 @@ Forward propagation runs every layer in order and returns the final
 probabilities.  Backpropagation runs the layers in reverse order and returns
 every gradient, all the way to the input.
 
-This module deliberately does **not** normalise gradients or update
-parameters: the SDG loop (Phase 4) owns the learning-rate schedule and the
-parameter updates.
+Gradient contract
+-----------------
+* The mean categorical cross-entropy loss averages over the batch once, at the
+  loss level.
+* The softmax + cross-entropy logits gradient is the **fused** simplified
+  gradient ``G = (P - Y) / B`` (see Section 14 of
+  ``docs/cnn_mathematical_foundations.md``).  This is computed exactly once,
+  either by the caller passing ``dy = (P - Y) / B`` into :meth:`backward`, or
+  by calling ``backward`` with ``dy=None``, in which case this class computes
+  the fused gradient from the cached probabilities.
+* ``StableSoftmax.backward`` is the **general softmax vector-Jacobian product**
+  and must NOT be passed an already-fused logits gradient, because doing so
+  applies the softmax derivative a second time.  The fused path in this class
+  therefore does not route through :meth:`StableSoftmax.backward`.
+* Convolution and dense parameter gradients are batch-averaged exactly once
+  (dense: ``A.T @ G`` with ``G`` already carrying the ``1/B``; conv: the
+  mean over the batch is folded into the upstream ``dy``).
 """
 
 from __future__ import annotations
@@ -56,6 +70,8 @@ class ScratchCNN:
         self.dense: Dense | None = None
         self.softmax: StableSoftmax = StableSoftmax()
         self.loss: CategoricalCrossEntropy = CategoricalCrossEntropy()
+        self._last_logits: np.ndarray | None = None
+        self._last_probs: np.ndarray | None = None
 
         for entry in layers:
             kind = entry.get("type")
@@ -84,7 +100,7 @@ class ScratchCNN:
         if not all([self.conv, self.dense]):
             raise ValueError("the scratch model needs a Conv2D and a Dense layer")
 
-    # -- forward ------------------------------------------------------------ #
+    # -- forward ------------------------------------------------------------
 
     def forward(self, x: np.ndarray, y: np.ndarray | None = None) -> np.ndarray | tuple[np.ndarray, float]:
         """Push ``x`` through the whole network.
@@ -102,33 +118,48 @@ class ScratchCNN:
         out = self.flatten.forward(out)
         logits = self.dense.forward(out)
         probs = self.softmax.forward(logits)
+        self._last_logits = logits
+        self._last_probs = probs
         if y is None:
             return probs
         return probs, self.loss.forward(probs, y)
 
-    # -- backward ----------------------------------------------------------- #
+    # -- backward -----------------------------------------------------------
 
-    def backward(self, dy: np.ndarray, y: np.ndarray) -> dict[str, np.ndarray]:
+    def backward(
+        self, dy: np.ndarray | None, y: np.ndarray | None = None
+    ) -> dict[str, np.ndarray]:
         """Backpropagate and return every gradient.
 
         Args:
-            dy: Upstream gradient w.r.t. the probabilities, already carrying
-                the batch-averaging factor (``(P - Y) / B``).
-            y: One-hot targets ``(B, 10)``.
+            dy: Upstream gradient w.r.t. the pre-softmax logits, **already
+                carrying the batch-averaging factor ``(P - Y) / B``**.  This
+                value already contains the single ``1 / B`` of the mean loss,
+                so no layer in this chain divides by ``B`` again.  Pass
+                ``None`` to compute it automatically as
+                ``(self._last_probs - y) / B`` from the cached probabilities.
+            y: One-hot targets ``(B, 10)``.  Required when ``dy is None``.
 
         Returns:
             Dict with keys ``"x"``, ``"W1"``, ``"b1"``, ``"W2"``, ``"b2"``.
         """
-        # Loss gradient already applied: softmax.backward returns (P - Y) / B
-        # once, which is exactly the upstream ``dy`` this method expects.
-        dlogits = self.softmax.backward(dy if dy is not None else self.loss.backward())
+        if dy is None:
+            if y is None:
+                raise ValueError(
+                    "backward(dy=None) requires a one-hot target y to form "
+                    "(P - Y) / B"
+                )
+            if self._last_probs is None:
+                raise RuntimeError("backward(dy=None) must follow a forward(x, y) call")
+            dy = (self._last_probs - y) / self._last_probs.shape[0]
 
-        dW2, db2 = None, None
+        # Fused softmax + cross-entropy path: the logits gradient is
+        # (P - Y) / B.  We hand it straight to the dense layer; it must never
+        # pass through StableSoftmax.backward, which is the general
+        # vector-Jacobian product and would be applied a second time.
+        dlogits = dy
         out = self.dense.backward(dlogits)
-        if isinstance(out, tuple):
-            dx, dW2, db2 = out
-        else:  # single-sample dense (no batch)
-            dx, dW2, db2 = out, _zero_like(self.dense.W), _zero_like(self.dense.b)
+        dx, dW2, db2 = out
 
         out = self.flatten.backward(dx)
         out = self.pool.backward(out)
@@ -137,7 +168,7 @@ class ScratchCNN:
 
         return {"x": dx, "W1": dW1, "b1": db1, "W2": dW2, "b2": db2}
 
-    # -- helpers ------------------------------------------------------------ #
+    # -- helpers ------------------------------------------------------------
 
     def parameters(self) -> list[np.ndarray]:
         """All trainable parameters, in a deterministic order."""
@@ -150,6 +181,7 @@ class ScratchCNN:
             params.append(self.dense.b)
         return params
 
-
-def _zero_like(arr: np.ndarray) -> np.ndarray:
-    return np.zeros_like(arr, dtype=np.float64)
+    @property
+    def _probs(self) -> np.ndarray | None:
+        """Cached probabilities from the last forward pass."""
+        return getattr(self, "_last_probs", None)

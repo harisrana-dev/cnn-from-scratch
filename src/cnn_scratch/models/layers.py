@@ -23,6 +23,7 @@ vector, tensor, ...) where the leading axis is always interpreted as the
 sample/batch axis.
 """
 
+
 from __future__ import annotations
 
 from typing import Any
@@ -107,7 +108,7 @@ class Conv2D:
         self.b = np.zeros((cout,), dtype=np.float64)
         self._cache: dict[str, Any] = {}
 
-    # -- forward ------------------------------------------------------------ #
+    # -- forward ------------------------------------------------------------
 
     def forward(self, x: np.ndarray) -> np.ndarray:
         """Compute ``self.W * x + self.b`` (cross-correlation).
@@ -144,7 +145,7 @@ class Conv2D:
                         y[b, i, j, f] = np.sum(patch * self.W[:, :, :, f]) + self.b[f]
         return y
 
-    # -- backward ----------------------------------------------------------- #
+    # -- backward -----------------------------------------------------------
 
     def backward(self, dy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Return ``(dX, dW, db)`` for this layer's cached forward input.
@@ -166,7 +167,7 @@ class Conv2D:
             raise ValueError(
                 f"Conv2D backward: dy spatial shape {(out_h, out_w)} does not match "
                 f"expected {(h - kh + 1, w - kw + 1)} for input {(h, w)} with kernel "
-                f"{(kh, kw)}"
+                f"({(kh, kw)})"
             )
         if cout != self.W.shape[3]:
             raise ValueError(f"Conv2D backward: dy channels {cout} != W channels {self.W.shape[3]}")
@@ -276,10 +277,14 @@ class MaxPool2D:
 
         dX[b, s*i+u, s*j+v, f] += dY[b, i, j, f] for the winning (u, v)
 
-    The pooling window must divide the spatial dimensions exactly. Ties resolve
-    to the **first maximum in row-major order** (smallest ``(u, v)``
-    lexicographically); this is exactly what ``numpy.argmax`` does on a
-    flattened window, so the forward pass and the gradient routing agree.
+    The output spatial size is ``floor((H - pool_size) / stride) + 1`` per
+    axis (valid pooling: trailing rows/columns that cannot fill a whole
+    window are dropped).  The gradients are summed with ``+=`` so that
+    overlapping windows (``stride < pool_size``) sharing an input cell each
+    contribute.  Ties resolve to the **first maximum in row-major order**
+    (smallest ``(u, v)`` lexicographically); this is exactly what
+    ``numpy.argmax`` does on a flattened window, so the forward pass and the
+    gradient routing agree.
     """
 
     def __init__(self, pool_size: int = 2, stride: int | None = None) -> None:
@@ -287,34 +292,40 @@ class MaxPool2D:
             raise ValueError("pool_size must be positive")
         self.pool_size = pool_size
         self.stride = stride if stride is not None else pool_size
+        if self.stride <= 0:
+            raise ValueError("stride must be positive")
         self._cache: dict[str, Any] = {}
 
     def forward(self, x: np.ndarray) -> np.ndarray:
-        """Pool along the two trailing spatial axes. Caches argmax windows."""
+        """Pool along the two trailing spatial axes. Caches argmax positions."""
         x = _as_batch(x)
         batch, h, w, cin = x.shape
-        if h % self.pool_size or w % self.pool_size:
+        if h < self.pool_size or w < self.pool_size:
             raise ValueError(
-                f"MaxPool2D expects evenly divisible spatial dims for a "
-                f"{self.pool_size}x{self.pool_size} window; got ({h}, {w})"
+                f"MaxPool2D input ({h}, {w}) is smaller than the "
+                f"{self.pool_size}x{self.pool_size} window"
             )
-        out_h = h // self.pool_size
-        out_w = w // self.pool_size
+        out_h = (h - self.pool_size) // self.stride + 1
+        out_w = (w - self.pool_size) // self.stride + 1
 
         y = np.empty((batch, out_h, out_w, cin), dtype=np.float64)
-        argmax = np.zeros((batch, h, w, cin), dtype=np.float64)
+        # argmax[b, i, j, c] = flat spatial index (row-major over h x w) of
+        # the winning input cell for that output window and channel.
+        argmax = np.zeros((batch, out_h, out_w, cin), dtype=np.int64)
         for b in range(batch):
             for i in range(out_h):
                 for j in range(out_w):
-                    window = x[b, i * self.stride : (i + 1) * self.stride,
-                               j * self.stride : (j + 1) * self.stride, :]
+                    window = x[b, i * self.stride : i * self.stride + self.pool_size,
+                               j * self.stride : j * self.stride + self.pool_size, :]
                     for c in range(cin):
                         flat = window[:, :, c].reshape(-1)
                         best = int(np.argmax(flat))
                         local_u, local_v = divmod(best, self.pool_size)
                         y[b, i, j, c] = window[local_u, local_v, c]
-                        argmax[b, i * self.stride + local_u,
-                               j * self.stride + local_v, c] = 1.0
+                        argmax[b, i, j, c] = (
+                            (i * self.stride + local_u) * w
+                            + (j * self.stride + local_v)
+                        )
         self._cache = {"x": x, "argmax": argmax}
         return y
 
@@ -324,37 +335,26 @@ class MaxPool2D:
         dy = _as_batch(dy)
         batch, h, w, cin = x.shape
         _, out_h, out_w, _ = dy.shape
-        if (out_h, out_w) != (h // self.pool_size, w // self.pool_size):
+        expected = ((h - self.pool_size) // self.stride + 1,
+                    (w - self.pool_size) // self.stride + 1)
+        if (out_h, out_w) != expected:
             raise ValueError(
                 f"MaxPool2D backward: dy spatial shape {(out_h, out_w)} does not match "
-                f"expected {(h // self.pool_size, w // self.pool_size)}"
+                f"expected {expected}"
             )
         if dy.shape[3] != cin:
             raise ValueError(f"MaxPool2D backward: dy channels {dy.shape[3]} != {cin}")
 
         dx = np.zeros_like(x, dtype=np.float64)
-        # Backpropagate each upstream gradient to the cached maximum position
-        # of its pooling window.  self._cache["argmax"] holds a 1.0 at exactly
-        # the input position that was the maximum for that window and channel.
-        # We scan the four positions inside each output window and route the
-        # gradient to the position whose cached flag is 1.0.
+        dx_flat = dx.reshape(batch, h * w, cin)
+        argmax = self._cache["argmax"]
         for b in range(batch):
             for i in range(out_h):
                 for j in range(out_w):
                     for c in range(cin):
-                        for u in range(self.pool_size):
-                            for v in range(self.pool_size):
-                                if self._cache["argmax"][b, i * self.stride + u,
-                                                          j * self.stride + v, c]:
-                                    dx[b, i * self.stride + u, j * self.stride + v, c] = dy[b, i, j, c]
-                                    break
-                            else:
-                                continue
-                            break
-                for j in range(out_w):
-                    for c in range(cin):
-                        if self._cache["argmax"][b, i * self.stride, j * self.stride, c]:
-                            dx[b, i * self.stride, j * self.stride, c] = dy[b, i, j, c]
+                        # Overlapping windows may share an input cell, so the
+                        # routed gradients are summed, not overwritten.
+                        dx_flat[b, argmax[b, i, j, c], c] += dy[b, i, j, c]
         return dx
 
 
@@ -454,16 +454,31 @@ class Dense:
 class StableSoftmax:
     """Numerically stable softmax over the trailing (class) axis.
 
-    Subtracts the per-sample maximum logit before exponentiating:
-    ::
+    Forward::
 
         m = max_k Z[..., k]
         P = exp(Z - m) / sum_k exp(Z - m)
 
-    This keeps the largest numerator at exactly 1 (no overflow) and the
-    smallest representable probability limited only by float32 subnormals,
-    exactly as derived in Section 12 of
-    ``docs/cnn_mathematical_foundations.md``.
+    The shift keeps the largest numerator at exactly 1 (no overflow) and the
+    smallest probability limited only by float32 subnormals, as derived in
+    Section 12 of ``docs/cnn_mathematical_foundations.md``.
+
+    Backward contract
+    -----------------
+    ``StableSoftmax.backward(dP)`` implements the **general softmax
+    vector-Jacobian product**.  For an arbitrary upstream gradient ``dP``::
+
+        dZ = P * (dP - sum(dP * P, axis=-1, keepdims=True))
+
+    It is **not** the fused softmax+cross-entropy shortcut.  The combined
+    softmax + categorical cross-entropy path, whose logits gradient is
+    ``(P - Y) / B`` (derived in Section 14), is a *separate* explicit
+    computation performed by :class:`CategoricalCrossEntropy.backward`
+    (``(P - Y) / B``) and by :class:`ScratchCNN.backward` (which hands this
+    value to the dense layer directly, without passing it through the
+    softmax).  Applying the softmax derivative a second time to an already-
+    fused logits gradient would double-count the softmax and corrupt the
+    gradient.
     """
 
     def __init__(self) -> None:
@@ -475,25 +490,33 @@ class StableSoftmax:
         self._cache["z"] = z
         z = z - np.max(z, axis=-1, keepdims=True)
         e = np.exp(z)
-        return e / np.sum(e, axis=-1, keepdims=True)
+        p = e / np.sum(e, axis=-1, keepdims=True)
+        self._cache["p"] = p
+        return p
 
-    def backward(self, dy: np.ndarray) -> np.ndarray:
-        """Gradient of the combined softmax + cross-entropy for the training path.
+    def backward(self, dP: np.ndarray) -> np.ndarray:
+        """Gradient of the softmax for an arbitrary upstream gradient.
 
-        This returns ``dY`` shifted back through the softmax (i.e. ``P - Y``
-        already carrying the ``/B`` from the loss), which is what makes the
-        combined forward/backward pass numerically safe.
+        Vector-Jacobian product ``dZ = P * (dP - sum(dP * P, axis=-1))``.
+
+        Args:
+            dP: Upstream gradient, same shape as the logits ``(B, N)``.
+
+        Returns:
+            ``dZ``: gradient w.r.t. the logits.
         """
         z = _as_batch(self._cache["z"])
-        dy = _as_batch(dy)
-        if dy.shape != z.shape:
+        dP = _as_batch(dP)
+        if dP.shape != z.shape:
             raise ValueError(
-                f"StableSoftmax backward: dy shape {dy.shape} != input shape {z.shape}"
+                f"StableSoftmax backward: dP shape {dP.shape} != input shape {z.shape}"
             )
-        # Combined softmax + cross-entropy backward: the loss already folded
-        # the softmax into its gradient, so the softmax layer's backward is
-        # the identity on the logits gradient.
-        return dy
+        p = self._cache.get("p")
+        if p is None:
+            z = z - np.max(z, axis=-1, keepdims=True)
+            e = np.exp(z)
+            p = e / np.sum(e, axis=-1, keepdims=True)
+        return p * (dP - np.sum(dP * p, axis=-1, keepdims=True))
 
 
 # ---------------------------------------------------------------------------
@@ -508,6 +531,20 @@ class CategoricalCrossEntropy:
 
     Probabilities are clipped to ``[eps, 1]`` before the log, so a degenerate
     probability of exactly 0 never turns the loss into ``inf``.
+
+    Backward contract
+    -----------------
+    ``CategoricalCrossEntropy.backward()`` returns the gradient of the mean
+    loss with respect to the **pre-softmax logits**, i.e. the fused
+    softmax+cross-entropy logits gradient::
+
+        G = (P - Y) / B
+
+    This is derived in Section 14 of
+    ``docs/cnn_mathematical_foundations.md``: chaining the softmax Jacobian
+    with the cross-entropy derivative collapses to ``(P - Y) / B``.  This is a
+    single application of the batch averaging (at the loss level); the
+    softmax layer's backward must not be applied a second time.
     """
 
     def __init__(self, eps: float = 1e-12) -> None:
@@ -534,14 +571,15 @@ class CategoricalCrossEntropy:
         return float(-np.sum(y * np.log(np.clip(p, self.eps, 1.0))) / p.shape[0])
 
     def backward(self) -> np.ndarray:
-        """Gradient of the mean loss w.r.t. the logits.
+        """Gradient of the mean loss w.r.t. the pre-softmax logits.
 
-        The batch mean gives an extra division by ``B``; the combined softmax +
-        loss path therefore returns ``(P - Y) / B`` once, not twice.
+        Returns ``(P - Y) / B`` element-wise, with the same shape as ``p``.
+        The batch mean gives one division by ``B``; no softmax derivative is
+        applied here.
         """
         p = self._cache["p"]
         y = self._cache["y"]
-        return -(y / np.clip(p, self.eps, 1.0)).sum(axis=1) / p.shape[0]
+        return (p - y) / p.shape[0]
 
 
 # ---------------------------------------------------------------------------
