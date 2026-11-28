@@ -46,15 +46,22 @@ makes every derivation and every gradient check small enough to verify by hand.
 loss function, no optimiser and no training loop. No accuracy or loss figure
 exists yet.
 
-## Phase 3 — NumPy layer implementations
+## Phase 3 — NumPy layer implementations (complete)
 
-- [ ] `Conv2D` forward (im2col or direct) and backward (dW, db, dX)
-- [ ] `ReLU` forward/backward
-- [ ] `MaxPool2D` forward/backward with argmax routing
-- [ ] `Dense` forward/backward
-- [ ] `Softmax` + categorical cross-entropy, numerically stable
-- [ ] Gradient checking against finite differences
-- [ ] Unit tests for each layer (analytic gradient vs. numerical)
+- [x] `Conv2D` forward (im2col or direct) and backward (dW, db, dX)
+- [x] `ReLU` forward/backward
+- [x] `MaxPool2D` forward/backward with argmax routing
+- [x] `Dense` forward/backward
+- [x] `Softmax` + categorical cross-entropy, numerically stable
+- [x] Gradient checking against finite differences
+- [x] Unit tests for each layer (analytic gradient vs. numerical)
+
+Phase 3 also fixes the gradient contract made explicit in the docs: the mean
+cross-entropy loss fuses with the softmax into the single logits gradient
+`(P - Y) / B`, which `ScratchCNN.backward` hands straight to the dense layer;
+`StableSoftmax.backward` remains the general vector-Jacobian product for
+arbitrary upstream gradients.  `git diff --check` is clean and the full suite
+passes (77 tests).
 
 ## Phase 4 — Scratch CNN model and training
 

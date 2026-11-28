@@ -1,20 +1,19 @@
-"""CNN implementations (populated in later phases).
+"""CNN implementations.
 
 Implemented:
 
 * ``architecture.py`` – the frozen architecture from
   ``configs/experiment_config.json``: per-layer output shapes and trainable
   parameter counts, with validation. No layer computation happens here.
+* ``layers.py`` (Phase 3) – NumPy convolution, ReLU, max-pooling, flatten,
+  dense, stable softmax and categorical cross-entropy layers with manual
+  forward and backward passes (pure NumPy, no autograd).
+* ``scratch_cnn.py`` (Phase 3) – the scratch model: layer assembly, forward
+  propagation and backpropagation returning every gradient. Parameter
+  updates, metrics and the training loop belong to Phase 4.
 
-Planned, not yet implemented:
+Planned:
 
-* ``layers.py`` – NumPy convolution, ReLU, max-pooling, dense and softmax layers
-  with manual forward and backward passes.
-* ``scratch_cnn.py`` – the scratch model: parameter initialisation, forward
-  propagation, backpropagation, SGD updates and prediction.
-* ``keras_cnn.py`` – the equivalent Keras/TensorFlow model built from the same
-  layer specification for comparison.
-
-No forward pass, backward pass, loss, gradient or training code exists yet;
-Phases 1 and 2 cover the dataset, the mathematics and the architecture only.
+* ``keras_cnn.py`` – the equivalent Keras/TensorFlow model built from the
+  same layer specification for comparison (Phase 5).
 """

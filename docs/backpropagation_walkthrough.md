@@ -388,7 +388,12 @@ Chapter order matters in two places: the ReLU mask must come from `Z1`, not
 ## 6. Maintaining a correct implementation in Phase 3
 
 Backpropagation is easy to get *approximately* right and hard to get exactly
-right. The checks below are the plan for Phase 3; none of them runs yet.
+right. The checks below were the plan for Phase 3; items 1 and 2 now run on
+every `pytest` invocation in `tests/test_layers.py` (float64 finite-difference
+gradient checks plus structural assertions such as shapes, pooling tie
+handling, overlapping-window accumulation and gradient conservation).
+Item 3 is exercised by the Phase 4 training smoke tests, item 4 by the Phase 4
+determinism check, and item 5 by Phase 5.
 
 1. **Analytic versus numerical gradients.** For each parameter tensor, perturb a
    handful of entries by $\pm\varepsilon$ and compare

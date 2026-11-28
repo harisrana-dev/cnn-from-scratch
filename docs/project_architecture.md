@@ -44,8 +44,10 @@ src/cnn_scratch/
 │   ├── dataset_utils.py   constants, validation, NPZ/JSON persistence
 │   └── prepare_data.py    acquisition → subset → normalise → validate → save
 ├── models/
-│   ├── __init__.py        package docstring, lists planned modules
-│   └── architecture.py    frozen shapes, parameter counts, validation
+│   ├── __init__.py        package docstring listing implemented modules
+│   ├── architecture.py    frozen shapes, parameter counts, validation
+│   ├── layers.py          Conv2D, ReLU, MaxPool2D, Flatten, Dense, softmax, CE
+│   └── scratch_cnn.py     assembled model: forward and backward passes
 └── utils/
     ├── __init__.py
     └── visualization.py   sample grid and class-distribution figures
@@ -77,9 +79,9 @@ plots work in a terminal and in VS Code alike.
 `architecture.py` owns the frozen network: it reads the `architecture` block of
 the experiment configuration, validates every layer declaration, and reports the
 output shape and trainable-parameter count of each layer (26x26x8 → 13x13x8 →
-1352 → 10, 80 + 13,530 = 13,610 parameters). It performs no computation, which
-is what keeps this phase free of layer code while making the documented numbers
-checkable.
+1352 → 10, 80 + 13,530 = 13,610 parameters). It performs no computation
+itself — layer code lives in `layers.py` — which keeps the documented numbers
+independently checkable.
 
 ## Data flow
 
@@ -127,8 +129,11 @@ scratch CNN (NumPy)          Keras CNN (TensorFlow)
 
 | File | Phase | Content |
 |---|---|---|
-| `models/layers.py` | 3 | `Conv2D`, `ReLU`, `MaxPool2D`, `Dense`, `Softmax` with `forward`/`backward` |
-| `models/scratch_cnn.py` | 4 | parameter init, forward, backward, SGD, `predict`, `evaluate` |
+| `models/scratch_cnn.py` (SGD, metrics) | 4 | parameter updates, training loop, history and checkpoints |
 | `models/keras_cnn.py` | 5 | equivalent Keras model |
 | `utils/metrics.py` | 5 | accuracy, confusion matrix, history export |
 | `utils/reporting.py` | 6 | comparison tables and figures |
+
+Already implemented in earlier phases: `models/architecture.py` (Phase 2),
+`models/layers.py` and the forward/backward half of `models/scratch_cnn.py`
+(Phase 3).
